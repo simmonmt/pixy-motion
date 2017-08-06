@@ -2,16 +2,31 @@
 // resolution)
 
 #include <fcntl.h>
+#include <iostream>
+#include <mach/clock.h>
+#include <mach/mach.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
-#include <iostream>
+
 #include "opencv2/core/mat.hpp"
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "pixy.h"
+
+void current_utc_time(struct timespec *ts) {
+  clock_serv_t cclock;
+  mach_timespec_t mts;
+  host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+  clock_get_time(cclock, &mts);
+  mach_port_deallocate(mach_task_self(), cclock);
+  ts->tv_sec = mts.tv_sec;
+  ts->tv_nsec = mts.tv_nsec;
+}
 
 int main(int argc, char *argv[]) {
   int pixy_init_status;
@@ -36,6 +51,9 @@ int main(int argc, char *argv[]) {
   return_value = pixy_command("stop", END_OUT_ARGS, &response, END_IN_ARGS);
   printf("STOP returned %d response %d\n", return_value, response);
 
+  struct timespec start;
+  current_utc_time(&start);
+
   response = 0;
   return_value =
       pixy_command("cam_getFrame",  // String id for remote procedure
@@ -51,8 +69,13 @@ int main(int argc, char *argv[]) {
                    &pixels,  // pointer to mem address for returned frame
                    0);
 
+  struct timespec end;
+  current_utc_time(&end);
+
   printf("getFrame returned %d response %d\n", return_value, response);
   printf("returned w %d h %d npix %d\n", width, height, numPixels);
+  printf("took %f ms\n",
+         static_cast<double>(end.tv_nsec - start.tv_nsec) / 1000000);
 
   // quit now if not successful:
   if (return_value != 0) {
